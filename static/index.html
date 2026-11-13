@@ -474,9 +474,62 @@
       li.row:first-child { border-top: 0; }
       li.row:hover { background: var(--panel-2); }
       .title {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
         font-size: 0.98rem;
         letter-spacing: -0.01em;
         min-width: 0;
+      }
+      .title-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.15rem;
+        min-width: 0;
+        max-width: 100%;
+      }
+      .title-name.editing { flex: 1; }
+      .title-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      button.rename, button.title-ok, button.title-x {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        width: 1.35rem;
+        height: 1.35rem;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      button.rename svg, button.title-ok svg, button.title-x svg { width: 0.95rem; height: 0.95rem; }
+      button.rename { opacity: 0; width: 0; overflow: hidden; }
+      li.row:hover button.rename,
+      li.row:focus-within button.rename,
+      button.rename:focus-visible { opacity: 1; width: 1.35rem; color: var(--fg); }
+      button.title-ok:hover, button.title-ok:focus-visible { color: var(--ok); }
+      button.title-x:hover, button.title-x:focus-visible { color: var(--danger); }
+      input.title-input {
+        flex: 1;
+        min-width: 0;
+        width: 12rem;
+        font: inherit;
+        font-size: 0.98rem;
+        letter-spacing: -0.01em;
+        color: var(--fg);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.12rem 0.45rem;
+      }
+      @media (hover: none) {
+        button.rename { opacity: 0.75; width: 1.35rem; }
       }
       .meta {
         display: flex;
@@ -736,6 +789,9 @@
       const GRIP_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>';
       const CHEVRON_DOWN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
       const CHEVRON_RIGHT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
+      const SQUARE_PEN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></svg>';
+      const CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+      const X_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 
       function lockIcon(open) {
         const holder = document.createElement("span");
@@ -759,6 +815,64 @@
         const holder = document.createElement("span");
         holder.innerHTML = GRIP_SVG;
         return holder.firstElementChild;
+      }
+
+      function svgIcon(markup) {
+        const holder = document.createElement("span");
+        holder.innerHTML = markup;
+        return holder.firstElementChild;
+      }
+
+      let editingId = null;
+      let editingDraft = "";
+
+      function iconButton(className, label, markup) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = className;
+        button.append(svgIcon(markup));
+        button.setAttribute("aria-label", label);
+        button.title = label;
+        return button;
+      }
+
+      function cancelRename() {
+        editingId = null;
+        editingDraft = "";
+        showError("");
+        render();
+      }
+
+      async function saveRename(id, value) {
+        const title = value.trim();
+        if (!title) {
+          showError("Enter a name");
+          return;
+        }
+        showError("");
+        let response;
+        try {
+          response = await fetch("/api/sessions/rename", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: id, title: title }),
+          });
+        } catch {
+          showError("Could not reach Grok Manager.");
+          return;
+        }
+        if (!response.ok) {
+          let message = "Could not rename that session.";
+          try {
+            const body = await response.json();
+            if (body && body.error) message = body.error;
+          } catch { /* keep default */ }
+          showError(message);
+          return;
+        }
+        editingId = null;
+        editingDraft = "";
+        await load();
       }
 
       function mergePinOrder(visible) {
@@ -921,7 +1035,7 @@
       }
 
       function shownGroups(query) {
-        return groups.filter((group) => group.sessions.some((session) => matches(session, query)));
+        return groups.filter((group) => folderMatches(group, query) || group.sessions.some((session) => matches(session, query)));
       }
 
       function everyShownCollapsed(query) {
@@ -986,6 +1100,15 @@
         return hay.includes(query);
       }
 
+      function folderMatches(group, query) {
+        return !!query && group.label.toLowerCase().includes(query);
+      }
+
+      function visibleSession(session, group, query) {
+        if (!query || folderMatches(group, query)) return true;
+        return matches(session, query);
+      }
+
       function render() {
         for (const group of groups) {
           for (const session of group.sessions) {
@@ -1006,12 +1129,12 @@
         const seenPins = new Set();
         for (const id of pinOrder) {
           const item = pinnedLookup.get(id);
-          if (!item || seenPins.has(id) || !matches(item.session, query)) continue;
+          if (!item || seenPins.has(id) || !visibleSession(item.session, item.group, query)) continue;
           seenPins.add(id);
           copies.push(item);
         }
         for (const [id, item] of pinnedLookup) {
-          if (seenPins.has(id) || !matches(item.session, query)) continue;
+          if (seenPins.has(id) || !visibleSession(item.session, item.group, query)) continue;
           copies.push(item);
         }
         if (copies.length) {
@@ -1037,7 +1160,7 @@
         }
         for (const group of groups) {
           total += group.sessions.length;
-          const sessions = group.sessions.filter((session) => matches(session, query));
+          const sessions = group.sessions.filter((session) => visibleSession(session, group, query));
           if (sessions.length === 0) continue;
           shown += sessions.length;
           const section = document.createElement("section");
@@ -1191,20 +1314,61 @@
         const main = document.createElement("div");
         const title = document.createElement("div");
         title.className = "title";
-        title.textContent = session.title;
+        const name = document.createElement("span");
+        name.className = "title-name";
+        const editing = editingId === session.id && !session.live;
+        if (editing) {
+          name.classList.add("editing");
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "title-input";
+          input.maxLength = 200;
+          input.value = editingDraft;
+          input.setAttribute("aria-label", "Session name");
+          input.addEventListener("input", () => { editingDraft = input.value; });
+          input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              saveRename(session.id, input.value);
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              cancelRename();
+            }
+          });
+          name.append(input);
+        } else {
+          const text = document.createElement("span");
+          text.className = "title-text";
+          text.textContent = session.title;
+          name.append(text);
+        }
         if (pinnedCopy) {
           const where = document.createElement("span");
           where.className = "where";
           where.textContent = group.label;
-          title.append(where);
+          name.append(where);
         }
-        if (protectedSession) {
-          const pill = document.createElement("span");
-          pill.className = "pill";
-          pill.title = "Locked";
-          pill.append(lockIcon(false));
-          title.append(pill);
+        if (editing) {
+          const save = iconButton("title-ok", "Save name", CHECK_SVG);
+          save.addEventListener("click", () => saveRename(session.id, name.querySelector("input.title-input").value));
+          const cancel = iconButton("title-x", "Cancel rename", X_SVG);
+          cancel.addEventListener("click", cancelRename);
+          name.append(save, cancel);
+        } else if (!session.live) {
+          const pen = iconButton("rename", "Rename " + session.title, SQUARE_PEN_SVG);
+          pen.addEventListener("click", () => {
+            editingId = session.id;
+            editingDraft = session.title;
+            render();
+            const field = document.querySelector("input.title-input");
+            if (field) {
+              field.focus();
+              field.select();
+            }
+          });
+          name.append(pen);
         }
+        title.append(name);
         const meta = document.createElement("div");
         meta.className = "meta";
         const idBtn = document.createElement("button");

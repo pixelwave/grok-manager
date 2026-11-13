@@ -19,6 +19,7 @@ import (
 var idRE = regexp.MustCompile(`^[0-9a-f-]{36}$`)
 
 const maxBatch = 200
+const maxTitle = 200
 
 type Session struct {
 	ID        string  `json:"id"`
@@ -874,6 +875,61 @@ func pointSessionAt(sessionDir, cwd string) error {
 		context["memory_workspace_path"] = workspace
 	}
 	return writeFileJSON(contextPath, context)
+}
+
+func RenameSession(sessionID, title string) (int, map[string]any) {
+	if !idRE.MatchString(sessionID) {
+		return 400, map[string]any{"error": "Invalid session id"}
+	}
+	title = strings.TrimSpace(title)
+	if title == "" || strings.ContainsAny(title, "\r\n") {
+		return 400, map[string]any{"error": "Enter a name"}
+	}
+	if utf8.RuneCountInString(title) > maxTitle {
+		return 400, map[string]any{"error": "Name is too long"}
+	}
+	path := findSessionDir(sessionID)
+	if path == "" {
+		return 404, map[string]any{"error": "Session not found"}
+	}
+	if _, ok := liveIDs()[sessionID]; ok {
+		return 409, map[string]any{"error": "This session is open in Grok"}
+	}
+	summaryPath := filepath.Join(path, "summary.json")
+	var summary map[string]any
+	if err := readJSON(summaryPath, &summary); err != nil || summary == nil {
+		return 404, map[string]any{"error": "Session not found"}
+	}
+	summary["generated_title"] = title
+	summary["title_is_manual"] = true
+	if err := writeFileJSON(summaryPath, summary); err != nil {
+		return 500, map[string]any{"error": "Could not rename that session"}
+	}
+	setIndexTitle(filepath.Join(sessionsRoot(), "session_search.sqlite"), sessionID, title)
+	return 200, map[string]any{"title": title}
+}
+
+func setIndexTitle(database, sessionID, title string) {
+	if database == "" {
+		return
+	}
+	if _, err := os.Stat(database); err != nil {
+		return
+	}
+	db, err := sql.Open("sqlite", database)
+	if err != nil {
+		return
+	}
+	defer db.Close()
+	var name string
+	if db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_docs'`).Scan(&name) != nil {
+		return
+	}
+	var has int
+	if db.QueryRow(`SELECT count(*) FROM pragma_table_info('session_docs') WHERE name = 'title'`).Scan(&has) != nil || has == 0 {
+		return
+	}
+	_, _ = db.Exec(`UPDATE session_docs SET title = ? WHERE session_id = ?`, title, sessionID)
 }
 
 func MoveSession(sessionID, target string) (int, map[string]any) {

@@ -532,11 +532,65 @@ def delete_session(session_id: str) -> tuple[int, str | None]:
     return 204, None
 
 
+def rename_session(session_id: object, title: object) -> tuple[int, dict]:
+    if not isinstance(session_id, str) or not ID_RE.fullmatch(session_id):
+        return 400, {"error": "Invalid session id"}
+    if not isinstance(title, str):
+        return 400, {"error": "Enter a name"}
+    title = title.strip()
+    if not title or "\n" in title or "\r" in title:
+        return 400, {"error": "Enter a name"}
+    if len(title) > 200:
+        return 400, {"error": "Name is too long"}
+    path = find_session_dir(session_id)
+    if path is None:
+        return 404, {"error": "Session not found"}
+    if session_id in live_ids():
+        return 409, {"error": "This session is open in Grok"}
+    summary_path = os.path.join(path, "summary.json")
+    try:
+        with open(summary_path, encoding="utf-8") as handle:
+            summary = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return 404, {"error": "Session not found"}
+    if not isinstance(summary, dict):
+        return 404, {"error": "Session not found"}
+    summary["generated_title"] = title
+    summary["title_is_manual"] = True
+    try:
+        _write_json(summary_path, summary)
+    except OSError:
+        return 500, {"error": "Could not rename that session"}
+    _set_index_title(os.path.join(sessions_root(), "session_search.sqlite"), session_id, title)
+    return 200, {"title": title}
+
+
+def _set_index_title(database: str, session_id: str, title: str) -> None:
+    if not database or not os.path.isfile(database):
+        return
+    try:
+        connection = sqlite3.connect(database, timeout=2)
+    except sqlite3.Error:
+        return
+    try:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(session_docs)")}
+        if "title" not in columns:
+            return
+        connection.execute("UPDATE session_docs SET title = ? WHERE session_id = ?", (title, session_id))
+        connection.commit()
+    except sqlite3.Error:
+        return
+    finally:
+        connection.close()
+
+
 def _post_error(path: str) -> str:
     if path == "/api/sessions/delete":
         return "Choose at least one session"
     if path == "/api/sessions/move":
         return "Unknown folder"
+    if path == "/api/sessions/rename":
+        return "Enter a name"
     if path == "/api/pins":
         return "Unknown pin"
     if path == "/api/machines":
@@ -765,6 +819,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/sessions/move":
             status, body = move_session(payload.get("id"), payload.get("cwd"))
+            self._send_json(status, body)
+            return
+        if path == "/api/sessions/rename":
+            status, body = rename_session(payload.get("id"), payload.get("title"))
             self._send_json(status, body)
             return
         if path == "/api/machines":

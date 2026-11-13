@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -50,6 +51,51 @@ func addSession(t *testing.T, folder, id, title, updated string) string {
 		_ = os.WriteFile(history, []byte("keep\n"), 0o644)
 	}
 	return path
+}
+
+func TestRenameSession(t *testing.T) {
+	setup(t)
+	id := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"
+	path := addSession(t, "/root/projects/plannr", id, "Older", "2026-02-01T00:00:00Z")
+	database := filepath.Join(os.Getenv("GROK_SESSIONS_DIR"), "session_search.sqlite")
+	db, err := sql.Open("sqlite", database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE session_docs (session_id TEXT PRIMARY KEY, cwd TEXT, updated_at INTEGER, title TEXT, content TEXT, content_hash TEXT)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = db.Exec(`INSERT INTO session_docs VALUES (?, ?, ?, ?, ?, ?)`, id, "/root/projects/plannr", 1, "Older", "body", "hash")
+	_ = db.Close()
+
+	status, body := RenameSession(id, "  Kept name  ")
+	if status != 200 || body["title"] != "Kept name" {
+		t.Fatalf("rename %d %#v", status, body)
+	}
+	var summary map[string]any
+	raw, err := os.ReadFile(filepath.Join(path, "summary.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if json.Unmarshal(raw, &summary) != nil || summary["generated_title"] != "Kept name" || summary["title_is_manual"] != true {
+		t.Fatalf("summary %#v", summary)
+	}
+	db, err = sql.Open("sqlite", database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var indexed string
+	if db.QueryRow(`SELECT title FROM session_docs WHERE session_id = ?`, id).Scan(&indexed) != nil || indexed != "Kept name" {
+		t.Fatal(indexed)
+	}
+	if status, body = RenameSession(id, "   "); status != 400 {
+		t.Fatalf("blank %d %#v", status, body)
+	}
+	if status, _ = RenameSession(id, strings.Repeat("a", 201)); status != 400 {
+		t.Fatal(status)
+	}
 }
 
 func TestGroupsSorted(t *testing.T) {

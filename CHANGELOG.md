@@ -2,6 +2,11 @@
 
 A release number is the day it is published, `YY.MM.DD`. 28 October 2026 is `26.10.28`. Another release that same day is `26.10.28.2`, then `26.10.28.3`. The next day starts again at three numbers, `26.10.29`.
 
+## 26.11.13 — 13 November 2026
+
+- Hover a session row and use the pencil to rename it. Grok keeps that name. In the pinned list, the folder tag stays next to the name.
+- A search that matches a project folder lists every session in that folder.
+
 ## 26.10.30.3 — 30 October 2026
 
 - The weekly read waits until Grok has finished refreshing the saved login. A login that needs that refresh no longer leaves the bar on "Weekly usage could not be read".

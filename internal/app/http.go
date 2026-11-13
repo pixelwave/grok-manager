@@ -97,6 +97,10 @@ func (server Server) session(w http.ResponseWriter, r *http.Request) {
 		server.move(w, r)
 		return
 	}
+	if r.URL.Path == "/api/sessions/rename" {
+		server.rename(w, r)
+		return
+	}
 	if r.Method != http.MethodDelete {
 		writeJSON(w, 404, map[string]any{"error": "Not found"})
 		return
@@ -121,6 +125,17 @@ func (server Server) deleteMany(w http.ResponseWriter, r *http.Request) {
 	}
 	ids, _ := payload["ids"].([]any)
 	status, body := DeleteSessions(ids)
+	writeJSON(w, status, body)
+}
+
+func (server Server) rename(w http.ResponseWriter, r *http.Request) {
+	payload, ok := readPayload(w, r, "Enter a name")
+	if !ok {
+		return
+	}
+	id, _ := payload["id"].(string)
+	title, _ := payload["title"].(string)
+	status, body := RenameSession(id, title)
 	writeJSON(w, status, body)
 }
 
