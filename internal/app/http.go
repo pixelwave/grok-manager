@@ -25,6 +25,7 @@ func (server Server) Handler() http.Handler {
 	mux.HandleFunc("/api/locks", server.locks)
 	mux.HandleFunc("/api/pins", server.pins)
 	mux.HandleFunc("/api/machines", server.machines)
+	mux.HandleFunc("/api/skills", server.skills)
 	mux.HandleFunc("/api/peers", server.peers)
 	mux.HandleFunc("/api/quota", server.quota)
 	mux.HandleFunc("/api/update", server.update)
@@ -54,6 +55,7 @@ func (server Server) sessions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{
 		"groups":     ListGroups(),
 		"pinned":     LoadPins(),
+		"skills":     ListSkills(),
 		"machines":   LoadMachines(),
 		"discovered": BrowsePeers(server.Port),
 		"update":     CheckUpdate(server.Version),
@@ -205,6 +207,26 @@ func (server Server) machines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status, body := AddMachine(name, url)
+	writeJSON(w, status, body)
+}
+
+func (server Server) skills(w http.ResponseWriter, r *http.Request) {
+	payload, ok := readPayload(w, r, "Unknown skill")
+	if !ok {
+		return
+	}
+	name, _ := payload["name"].(string)
+	if payload["remove"] == true {
+		status, body := DeleteSkill(name)
+		writeJSON(w, status, body)
+		return
+	}
+	disabled, disabledOK := payload["disabled"].(bool)
+	if !disabledOK {
+		writeJSON(w, 400, map[string]any{"error": "Unknown skill"})
+		return
+	}
+	status, body := SetSkillDisabled(name, disabled)
 	writeJSON(w, status, body)
 }
 

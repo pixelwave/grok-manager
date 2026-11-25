@@ -20,6 +20,8 @@ func setup(t *testing.T) {
 	t.Setenv("GROK_PINS_PATH", filepath.Join(dir, "pins.json"))
 	t.Setenv("GROK_MACHINES_PATH", filepath.Join(dir, "machines.json"))
 	t.Setenv("GROK_SETTINGS_PATH", filepath.Join(dir, "settings.json"))
+	t.Setenv("GROK_SKILLS_DIR", filepath.Join(dir, "skills"))
+	t.Setenv("GROK_CONFIG", filepath.Join(dir, "config.toml"))
 	if err := os.MkdirAll(os.Getenv("GROK_SESSIONS_DIR"), 0o755); err != nil {
 		t.Fatal(err)
 	}

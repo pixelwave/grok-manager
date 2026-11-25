@@ -349,7 +349,7 @@
       button.drag svg { width: 1rem; height: 1rem; }
       button.drag:hover, button.drag:focus-visible { color: var(--fg); }
       button.drag:active, li.row.dragging button.drag { cursor: grabbing; }
-      section.pinned { margin-bottom: 1.7rem; }
+      section.pinned { margin-bottom: 1.15rem; }
       section.pinned ul.rows {
         position: relative;
         isolation: isolate;
@@ -422,6 +422,47 @@
       }
       .separator::before { background: linear-gradient(90deg, var(--accent), transparent); }
       .separator::after { background: linear-gradient(90deg, transparent, var(--accent)); }
+      section.skills { margin-bottom: 0.85rem; }
+      li.skill {
+        display: grid;
+        grid-template-columns: minmax(7.5rem, 0.8fr) minmax(0, 1.8fr) auto;
+        gap: 0.45rem 1rem;
+        align-items: center;
+        padding: 0.85rem 1rem;
+        border-top: 1px solid var(--line);
+      }
+      li.skill:first-child { border-top: 0; }
+      li.skill:hover { background: var(--panel-2); }
+      li.skill.off { opacity: 0.55; }
+      button.skill-cmd {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--accent);
+        font: inherit;
+        font-size: 0.98rem;
+        font-weight: 560;
+        letter-spacing: -0.01em;
+        text-align: left;
+        cursor: pointer;
+      }
+      button.skill-cmd:hover, button.skill-cmd:focus-visible { color: #fff; }
+      .skill-desc { color: var(--muted); font-size: 0.88rem; line-height: 1.35; }
+      .skill-actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
+      button.skill-off, button.skill-delete {
+        font: inherit;
+        font-size: 0.78rem;
+        border-radius: 999px;
+        padding: 0.32rem 0.65rem;
+        background: transparent;
+        color: var(--fg);
+        border: 1px solid var(--line);
+        cursor: pointer;
+      }
+      button.skill-off[aria-pressed="true"] { color: var(--accent); border-color: rgba(255, 79, 163, 0.7); }
+      button.skill-off:disabled, button.skill-delete:disabled { opacity: 0.45; cursor: wait; }
+      button.skill-delete:hover, button.skill-delete:focus-visible { border-color: var(--danger); color: var(--danger); }
       .pill {
         display: inline-flex;
         align-items: center;
@@ -663,6 +704,7 @@
         button.fold-all { align-self: flex-start; }
         input[type="search"] { width: 100%; }
         li.row { grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; }
+        li.skill { grid-template-columns: 1fr; }
         .when, .live { grid-column: 2; }
       }
     </style>
@@ -710,7 +752,7 @@
     <div class="dialog-back" id="dialog" hidden>
       <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
         <h3 id="dialog-title">Delete this session?</h3>
-        <p id="dialog-copy">This removes <span class="who" id="dialog-name"></span> from disk. It cannot be resumed.</p>
+        <p id="dialog-copy"><span id="dialog-lead">This removes </span><span class="who" id="dialog-name"></span><span id="dialog-tail"> from disk. It cannot be resumed.</span></p>
         <code id="dialog-id"></code>
         <ul class="names" id="dialog-list" hidden></ul>
         <p id="dialog-move" hidden>Choose a project folder. The conversation stays with the session.</p>
@@ -751,7 +793,9 @@
       const dialogEl = document.getElementById("dialog");
       const dialogTitle = document.getElementById("dialog-title");
       const dialogCopy = document.getElementById("dialog-copy");
+      const dialogLead = document.getElementById("dialog-lead");
       const dialogName = document.getElementById("dialog-name");
+      const dialogTail = document.getElementById("dialog-tail");
       const dialogId = document.getElementById("dialog-id");
       const dialogList = document.getElementById("dialog-list");
       const dialogMove = document.getElementById("dialog-move");
@@ -774,6 +818,9 @@
       const machineAdd = document.getElementById("machine-add");
 
       let groups = [];
+      let skills = [];
+      let skillsFolded = true;
+      let pendingSkill = "";
       let pinOrder = [];
       let machines = [];
       let discovered = [];
@@ -1152,11 +1199,15 @@
           pinnedList.className = "rows";
           for (const item of copies) pinnedList.append(row(item.session, item.group, true));
           pinnedSection.append(pinnedHead, pinnedList);
+          listEl.append(pinnedSection);
+        }
+        listEl.append(skillsSection());
+        if (copies.length) {
           const rule = document.createElement("div");
           rule.className = "separator";
           rule.setAttribute("role", "separator");
           rule.textContent = "All sessions";
-          listEl.append(pinnedSection, rule);
+          listEl.append(rule);
         }
         for (const group of groups) {
           total += group.sessions.length;
@@ -1547,9 +1598,131 @@
         else cancelBtn.focus();
       }
 
+      function skillsSection() {
+        const section = document.createElement("section");
+        section.className = "skills";
+        const head = document.createElement("div");
+        head.className = "section-head";
+        const h2 = document.createElement("h2");
+        const fold = document.createElement("button");
+        fold.type = "button";
+        fold.className = "fold";
+        fold.append(chevronIcon(skillsFolded), document.createTextNode("Skills"));
+        fold.setAttribute("aria-expanded", skillsFolded ? "false" : "true");
+        fold.setAttribute("aria-label", (skillsFolded ? "Expand" : "Collapse") + " Skills");
+        fold.addEventListener("click", () => {
+          skillsFolded = !skillsFolded;
+          render();
+        });
+        h2.append(fold);
+        const count = document.createElement("div");
+        count.className = "n";
+        count.textContent = String(skills.length);
+        head.append(h2, count);
+        const list = document.createElement("ul");
+        list.className = "rows";
+        list.hidden = skillsFolded;
+        if (skills.length === 0) {
+          const empty = document.createElement("li");
+          empty.className = "skill";
+          const note = document.createElement("span");
+          note.className = "skill-desc";
+          note.textContent = "No custom skills.";
+          empty.append(note);
+          list.append(empty);
+        }
+        for (const skill of skills) {
+          list.append(skillRow(skill));
+        }
+        section.append(head, list);
+        return section;
+      }
+
+      function skillRow(skill) {
+        const li = document.createElement("li");
+        li.className = "skill";
+        if (skill.disabled) li.classList.add("off");
+        const cmd = document.createElement("button");
+        cmd.type = "button";
+        cmd.className = "skill-cmd";
+        const label = "/" + skill.name;
+        cmd.textContent = label;
+        cmd.title = "Copy " + label;
+        cmd.addEventListener("click", () => copyText(label, cmd));
+        const desc = document.createElement("div");
+        desc.className = "skill-desc";
+        desc.textContent = skill.description || "";
+        const actions = document.createElement("div");
+        actions.className = "skill-actions";
+        const off = document.createElement("button");
+        off.type = "button";
+        off.className = "skill-off";
+        off.setAttribute("aria-pressed", skill.disabled ? "true" : "false");
+        off.textContent = skill.disabled ? "Off" : "Disable";
+        off.title = skill.disabled ? "Use this skill again" : "Stop Grok using this skill";
+        off.addEventListener("click", () => setSkillDisabled(skill.name, !skill.disabled, off));
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "skill-delete";
+        del.textContent = "Delete";
+        del.addEventListener("click", () => openSkillDialog(skill));
+        actions.append(off, del);
+        li.append(cmd, desc, actions);
+        return li;
+      }
+
+      async function setSkillDisabled(name, disabled, button) {
+        if (button) button.disabled = true;
+        showError("");
+        let response;
+        try {
+          response = await fetch("/api/skills", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: name, disabled: disabled }),
+          });
+        } catch {
+          if (button) button.disabled = false;
+          showError("Could not reach Grok Manager.");
+          return;
+        }
+        if (!response.ok) {
+          let message = "Could not update that skill.";
+          try {
+            const body = await response.json();
+            if (body && body.error) message = body.error;
+          } catch { /* keep default */ }
+          showError(message);
+          if (button) button.disabled = false;
+          return;
+        }
+        await load();
+      }
+
+      function openSkillDialog(skill) {
+        dialogMode = "skill";
+        pendingSkill = skill.name;
+        pending = [];
+        setMoveVisible(false);
+        dialogTitle.textContent = "Delete this skill?";
+        dialogLead.textContent = "This removes ";
+        dialogName.textContent = "/" + skill.name;
+        dialogTail.textContent = " from this machine. Grok will no longer list it.";
+        dialogCopy.hidden = false;
+        dialogId.hidden = true;
+        dialogList.hidden = true;
+        confirmBtn.textContent = "Delete";
+        confirmBtn.disabled = false;
+        dialogEl.hidden = false;
+        cancelBtn.focus();
+      }
+
       function openDialog(sessions) {
         dialogMode = "delete";
+        pendingSkill = "";
         setMoveVisible(false);
+        dialogLead.textContent = "This removes ";
+        dialogTail.textContent = " from disk. It cannot be resumed.";
         confirmBtn.textContent = "Delete";
         pending = sessions.filter((session) => deletable(session));
         if (pending.length === 0) return;
@@ -1586,6 +1759,7 @@
 
       function closeDialog() {
         pending = [];
+        pendingSkill = "";
         dialogMode = "delete";
         dialogEl.hidden = true;
       }
@@ -1623,9 +1797,45 @@
         closeDialog();
       }
 
+      async function confirmSkillDelete() {
+        const name = pendingSkill;
+        if (!name) return;
+        confirmBtn.disabled = true;
+        showError("");
+        let response;
+        try {
+          response = await fetch("/api/skills", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: name, remove: true }),
+          });
+        } catch {
+          confirmBtn.disabled = false;
+          showError("Could not reach Grok Manager.");
+          return;
+        }
+        if (response.ok) {
+          closeDialog();
+          await load();
+          return;
+        }
+        let message = "Could not delete that skill.";
+        try {
+          const body = await response.json();
+          if (body && body.error) message = body.error;
+        } catch { /* keep default */ }
+        confirmBtn.disabled = false;
+        showError(message);
+        closeDialog();
+      }
+
       async function confirmDelete() {
         if (dialogMode === "move") {
           await confirmMove();
+          return;
+        }
+        if (dialogMode === "skill") {
+          await confirmSkillDelete();
           return;
         }
         if (pending.length === 0) return;
@@ -1691,6 +1901,7 @@
         }
         const data = await response.json();
         groups = Array.isArray(data.groups) ? data.groups : [];
+        skills = Array.isArray(data.skills) ? data.skills : [];
         pinOrder = Array.isArray(data.pinned) ? data.pinned : [];
         machines = Array.isArray(data.machines) ? data.machines : [];
         discovered = Array.isArray(data.discovered) ? data.discovered : [];

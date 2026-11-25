@@ -31,6 +31,8 @@ class ScannerTests(unittest.TestCase):
         os.environ["GROK_LOCKS_PATH"] = os.path.join(self.tmp, "locks.json")
         os.environ["GROK_PINS_PATH"] = os.path.join(self.tmp, "pins.json")
         os.environ["GROK_MACHINES_PATH"] = os.path.join(self.tmp, "machines.json")
+        os.environ["GROK_SKILLS_DIR"] = os.path.join(self.tmp, "skills")
+        os.environ["GROK_CONFIG"] = os.path.join(self.tmp, "config.toml")
         os.makedirs(os.environ["GROK_SESSIONS_DIR"])
         with open(self.active, "w", encoding="utf-8") as handle:
             json.dump([], handle)

@@ -11,7 +11,7 @@ import (
 	"github.com/pixelwave/grok-manager/internal/app"
 )
 
-var Version = "26.11.13"
+var Version = "2026.48.1"
 
 func isCLI(args []string) bool {
 	if len(args) < 2 {

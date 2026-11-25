@@ -16,6 +16,7 @@ A local page for the Grok sessions on one machine, grouped by project folder. Yo
 - Lock a session or a folder so it cannot be moved or deleted until you unlock it. An open session is marked **Session Active** and stays put.
 - Collapse one project, or use **Collapse all** at the top.
 - Pin a session to the accent panel and drag it to reorder.
+- Custom skills on this machine sit between Pinned and All sessions. The slash name copies the command.
 - The line under the title names this computer. **ADD** saves another machine by name and URL. Managers on the same network show up there on their own.
 - **Update available**, under that line, installs a newer release on this machine.
 
@@ -23,7 +24,7 @@ A local page for the Grok sessions on one machine, grouped by project folder. Yo
 
 ## Releases
 
-Current version: **26.11.13**. A release number is the day it is published, `YY.MM.DD`. Notes are in [CHANGELOG.md](CHANGELOG.md).
+Current version: **2026.48.1**. A release is `YYYY.W.R`: the ISO week-year, the ISO week, and the release inside that week, taken from the publication time in Europe/Berlin. Releases through 26.11.13 keep their `YY.MM.DD` numbers. Notes are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
 

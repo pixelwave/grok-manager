@@ -1,6 +1,13 @@
 # Changelog
 
-A release number is the day it is published, `YY.MM.DD`. 28 October 2026 is `26.10.28`. Another release that same day is `26.10.28.2`, then `26.10.28.3`. The next day starts again at three numbers, `26.10.29`.
+The next release is `YYYY.W.R`. `YYYY` is the ISO week-year and `W` is the ISO week of the publication time in Europe/Berlin. `R` starts at 1 for that week and increases by 1 for each later public release in the same week. `2026.46.2` follows `2026.46.1`. The next week starts at `2026.47.1`.
+
+Releases through 26.11.13 stay as published. Those numbers are the publish day, `YY.MM.DD`. 28 October 2026 is `26.10.28`. Another release that same day is `26.10.28.2`, then `26.10.28.3`. The next day starts again at three numbers, `26.10.29`.
+
+## 2026.48.1 — 25 November 2026
+
+- Custom skills on this machine sit between Pinned and All sessions. The section starts collapsed. Click a slash name to copy the command. Disable leaves the folder and tells Grok not to use the skill. Delete asks first, then removes that skill folder.
+- Release numbers are `YYYY.W.R`, from the publication time in Europe/Berlin. Releases through 26.11.13 keep their old numbers.
 
 ## 26.11.13 — 13 November 2026
 

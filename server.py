@@ -595,7 +595,229 @@ def _post_error(path: str) -> str:
         return "Unknown pin"
     if path == "/api/machines":
         return "Unknown machine"
+    if path == "/api/skills":
+        return "Unknown skill"
     return "Unknown lock"
+
+
+SKILL_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$")
+
+
+def skills_dir() -> str:
+    return os.environ.get("GROK_SKILLS_DIR") or os.path.expanduser("~/.grok/skills")
+
+
+def grok_config_path() -> str:
+    return os.environ.get("GROK_CONFIG") or os.path.expanduser("~/.grok/config.toml")
+
+
+def _first_sentence(text: str) -> str:
+    text = " ".join(text.split())
+    for index, char in enumerate(text):
+        if char == "." and (index == len(text) - 1 or text[index + 1] == " "):
+            return text[: index + 1]
+    return text
+
+
+def _display_sentence(text: str) -> str:
+    sentence = _first_sentence(text)
+    if len(sentence) <= 140:
+        return sentence
+    colon = sentence.find(":")
+    if colon >= 20:
+        head = sentence[:colon].strip()
+        if len(head) <= 140:
+            return head
+    cut = sentence[:140].rstrip()
+    space = cut.rfind(" ")
+    if space > 40:
+        cut = cut[:space].rstrip()
+    return cut + "…"
+
+
+def _skill_summary(path: str) -> str | None:
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        return None
+    if not text.startswith("---"):
+        return None
+    rest = text[3:]
+    if rest.startswith("\n"):
+        rest = rest[1:]
+    end = rest.find("\n---")
+    if end < 0:
+        return None
+    short = ""
+    description = ""
+    folding = False
+    for line in rest[:end].splitlines():
+        if folding:
+            if line.startswith(" ") or line.startswith("\t"):
+                description = f"{description} {line.strip()}".strip()
+                continue
+            folding = False
+        if ":" not in line or line.strip().startswith("#"):
+            continue
+        key, value = line.strip().split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if key == "short-description":
+            short = value.strip("\"'")
+        elif key == "description":
+            if value in ("", ">", "|", ">-", "|-"):
+                folding = True
+                description = ""
+            else:
+                description = value.strip("\"'")
+    if short.strip():
+        return " ".join(short.split())
+    return _display_sentence(description)
+
+
+def _read_disabled(path: str) -> list[str]:
+    try:
+        lines = open(path, encoding="utf-8").read().splitlines()
+    except OSError:
+        return []
+    start = next((i for i, line in enumerate(lines) if line.strip() == "[skills]"), -1)
+    if start < 0:
+        return []
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        trim = lines[index].strip()
+        if trim.startswith("[") and trim.endswith("]"):
+            end = index
+            break
+    for index in range(start + 1, end):
+        if lines[index].strip().startswith("disabled") and "=" in lines[index]:
+            blob = lines[index]
+            cursor = index
+            while blob.count("[") > blob.count("]") and cursor + 1 < end:
+                cursor += 1
+                blob += "\n" + lines[cursor]
+            value = blob.split("=", 1)[1]
+            return re.findall(r"""["']([^"']*)["']""", value)
+    return []
+
+
+def _format_disabled(names: list[str]) -> str:
+    return "disabled = [" + ", ".join(json.dumps(name) for name in names) + "]"
+
+
+def _write_disabled(path: str, names: list[str]) -> None:
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        text = ""
+    line = _format_disabled(names)
+    lines = text.split("\n")
+    start = next((i for i, item in enumerate(lines) if item.strip() == "[skills]"), -1)
+    if start < 0:
+        base = text
+        if base and not base.endswith("\n"):
+            base += "\n"
+        if base:
+            base += "\n"
+        updated = base + "[skills]\n" + line + "\n"
+    else:
+        end = len(lines)
+        for index in range(start + 1, len(lines)):
+            trim = lines[index].strip()
+            if trim.startswith("[") and trim.endswith("]"):
+                end = index
+                break
+        replaced = False
+        for index in range(start + 1, end):
+            if lines[index].strip().startswith("disabled") and "=" in lines[index]:
+                cursor = index
+                blob = lines[index]
+                while blob.count("[") > blob.count("]") and cursor + 1 < end:
+                    cursor += 1
+                    blob += "\n" + lines[cursor]
+                lines = lines[:index] + [line] + lines[cursor + 1 :]
+                replaced = True
+                break
+        if not replaced:
+            lines = lines[: start + 1] + [line] + lines[start + 1 :]
+        updated = "\n".join(lines)
+        if not updated.endswith("\n"):
+            updated += "\n"
+    temporary = path + ".tmp"
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(temporary, "w", encoding="utf-8") as handle:
+        handle.write(updated)
+    os.replace(temporary, path)
+
+
+def list_skills() -> list[dict]:
+    root = skills_dir()
+    disabled = set(_read_disabled(grok_config_path()))
+    found = []
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return []
+    for name in names:
+        if not SKILL_NAME.match(name):
+            continue
+        folder = os.path.join(root, name)
+        if not os.path.isdir(folder) and not os.path.islink(folder):
+            continue
+        summary = _skill_summary(os.path.join(folder, "SKILL.md"))
+        if summary is None:
+            continue
+        found.append({"name": name, "description": summary, "disabled": name in disabled})
+    return found
+
+
+def _known_skill(name: str) -> str | None:
+    if not isinstance(name, str) or not SKILL_NAME.match(name):
+        return None
+    root = os.path.abspath(skills_dir())
+    folder = os.path.abspath(os.path.join(root, name))
+    if os.path.commonpath([root, folder]) != root:
+        return None
+    if not os.path.isdir(folder) and not os.path.islink(folder):
+        return None
+    if not os.path.isfile(os.path.join(folder, "SKILL.md")):
+        return None
+    return folder
+
+
+def set_skill_disabled(name: str, disabled: bool) -> tuple[int, dict]:
+    if _known_skill(name) is None:
+        return 404, {"error": "Skill not found"}
+    path = grok_config_path()
+    names = [item for item in _read_disabled(path) if item != name]
+    if disabled:
+        names.append(name)
+    try:
+        _write_disabled(path, names)
+    except OSError:
+        return 500, {"error": "Could not update that skill."}
+    return 200, {"skills": list_skills()}
+
+
+def delete_skill(name: str) -> tuple[int, dict]:
+    folder = _known_skill(name)
+    if folder is None:
+        return 404, {"error": "Skill not found"}
+    try:
+        if os.path.islink(folder):
+            os.remove(folder)
+        else:
+            shutil.rmtree(folder)
+    except OSError:
+        return 500, {"error": "Could not delete that skill."}
+    path = grok_config_path()
+    if os.path.isfile(path):
+        names = [item for item in _read_disabled(path) if item != name]
+        try:
+            _write_disabled(path, names)
+        except OSError:
+            pass
+    return 200, {"skills": list_skills()}
 
 
 MAX_BATCH = 200
@@ -778,7 +1000,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = urllib.parse.urlparse(self.path).path
         if path == "/api/sessions":
-            self._send_json(200, {"groups": list_groups(), "pinned": load_pins(), "machines": load_machines()})
+            self._send_json(200, {"groups": list_groups(), "pinned": load_pins(), "skills": list_skills(), "machines": load_machines()})
             return
         if path in ("/", "/index.html"):
             self._send_file("index.html", "text/html; charset=utf-8")
@@ -830,6 +1052,15 @@ class Handler(BaseHTTPRequestHandler):
                 status, body = remove_machine(payload.get("name"))
             else:
                 status, body = add_machine(payload.get("name"), payload.get("url"))
+            self._send_json(status, body)
+            return
+        if path == "/api/skills":
+            if payload.get("remove") is True:
+                status, body = delete_skill(payload.get("name"))
+            elif isinstance(payload.get("disabled"), bool):
+                status, body = set_skill_disabled(payload.get("name"), payload.get("disabled"))
+            else:
+                status, body = 400, {"error": "Unknown skill"}
             self._send_json(status, body)
             return
         self._send_json(404, {"error": "Not found"})
